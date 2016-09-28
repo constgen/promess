@@ -1,2 +1,0 @@
-# promess
-Promise implementation
