@@ -28,21 +28,6 @@ describe('Promise', function () {
 		promise4 = undefined
 	})
 
-
-/*
-
-
-
-
-
-
-
-
-
-chain
-
-
- */
 	describe('constructor', function(){
 		it('can be initiated without a creation function', function(){
 			handler1.and.callFake(function(){
@@ -453,10 +438,11 @@ chain
 				resolve()
 			})
 			handler1.and.throwError(error1)
-			promise2 = promise1.then(handler1)
-			promise2.catch(handler2)
+			promise2 = promise1.then(handler1, handler2)
+			promise2.catch(handler3)
 
-			expect(handler2).toHaveBeenCalledWith(error1)
+			expect(handler2).not.toHaveBeenCalled()
+			expect(handler3).toHaveBeenCalledWith(error1)
 		})
 
 		it('catches exeptions in an error callback', function(){
@@ -470,7 +456,7 @@ chain
 			expect(handler2).toHaveBeenCalledWith(error1)
 		})
 
-		it('`then()` can handle an error in a second callbnack argument', function(){
+		it('`then()` can handle an error in a second callback argument', function(){
 			promise1 = new Promise(function(resolve, reject){
 				reject(error1)
 			})			
@@ -478,16 +464,6 @@ chain
 			promise1.then(undefined, handler2)
 			expect(handler1).toHaveBeenCalledWith(error1)			
 			expect(handler2).toHaveBeenCalledWith(error1)
-		})
-
-		it('`then()` can\'t catch an exeptions of a current success callback', function(){
-			promise1 = new Promise(function(resolve){
-				resolve()
-			})
-			handler1.and.throwError(error1)
-			promise1.then(handler1, handler2)
-
-			expect(handler2).not.toHaveBeenCalledWith(error1)
 		})
 	})
 
@@ -655,43 +631,38 @@ chain
 			expect(handler1.calls.count()).toEqual(3)
 		})
 
-		xit('is notified with a value', function(){
+		it('is notified with a value', function(){
 			var progress;
 			promise1 = new Promise(function(resolve, reject, notify){
 				progress = notify
 			})
 			promise1.then(null, null, handler1)
-			progress()
-			progress()
-			progress()
+			progress(value1)
 
-			expect(handler1.calls.count()).toEqual(3)
+			expect(handler1).toHaveBeenCalledWith(value1)
 		})
 
-		xit('is notified with multiple values', function(){
+		it('is notified with multiple values', function(){
 			var progress;
 			promise1 = new Promise(function(resolve, reject, notify){
 				progress = notify
 			})
 			promise1.then(null, null, handler1)
-			progress()
-			progress()
-			progress()
+			progress(value1, value2, value3)
 
-			expect(handler1.calls.count()).toEqual(3)
+			expect(handler1).toHaveBeenCalledWith(value1, value2, value3)
 		})
 
-		xit('handles `progress()`', function(){
-			var progress;
+		it('can be handled with `progress()`', function(){
+			var publish;
 			promise1 = new Promise(function(resolve, reject, notify){
-				progress = notify
+				publish = notify
 			})
-			promise1.then(null, null, handler1)
-			progress()
-			progress()
-			progress()
+			promise1.progress(handler1)
+			publish()
+			publish()
 
-			expect(handler1.calls.count()).toEqual(3)
+			expect(handler1.calls.count()).toEqual(2)
 		})
 
 		it('don\'t notify if resolved', function(done){
@@ -724,9 +695,18 @@ chain
 			}, 30)
 		})
 
-		xit('catches exeptions in a notify handler', function(){
+		it('catches exeptions in a notify handler', function(){
+			var publish;
+			promise1 = new Promise(function(resolve, reject, notify){
+				publish = notify
+			})
+			handler1.and.throwError(error1)
+			promise2 = promise1.then(null, handler3, handler1)
+			promise2.catch(handler2)
+			publish()
 
-
+			expect(handler3).not.toHaveBeenCalled()
+			expect(handler2).toHaveBeenCalledWith(error1)
 		})
 	})
 
@@ -739,6 +719,18 @@ chain
 			expect(handler1).toHaveBeenCalled()
 		})
 
+		xit('can\'t be performed if promise already finished', function(){
+			promise1 = new Promise(function(resolve){
+				resolve()
+			}, handler1)
+			promise1.catch(handler2)
+			promise1.cancel()
+			promise1.catch(handler2)
+
+			expect(handler1).not.toHaveBeenCalled()
+			expect(handler2).not.toHaveBeenCalled()
+		})
+
 		it('calls canceler', function(){
 			promise1 = new Promise(function(){}, handler1)
 			promise1.cancel()
@@ -746,21 +738,11 @@ chain
 			expect(handler1).toHaveBeenCalled()
 		})
 
-		xit('`cancel()` returns context', function(){
+		it('method `cancel()` returns a context', function(){
 			promise1 = new Promise(function(){}, handler1)
-			promise1.cancel()
+			var context = promise1.cancel()
 
-			expect(handler1).toHaveBeenCalled()
-		})	
-	})
-
-	describe('then', function(){
-		it('returns a new Promise instance', function(){
-			promise1 = new Promise()
-			promise2 = promise1.then(handler1)
-
-			expect(promise2).not.toEqual(promise1)
-			expect(promise2).toEqual(jasmine.any(Promise))
+			expect(context).toBe(promise1)
 		})
 	})
 
@@ -772,106 +754,88 @@ chain
 			expect(promise2).not.toEqual(promise1)
 			expect(promise2).toEqual(jasmine.any(Promise))
 		})
-	})
 
-	describe('chaining', function(){
-		/*
-			window.p = new Promise(function (resolve, reject) { setTimeout(resolve) })
-			.then(
-				function () {
-					return new Error('error-test')
-					return new Promise(function (resolve) { setTimeout(resolve) }).then(
-						function () { throw new Error('345') },
-						function (e) { console.error('error 1.5', e) }
-					).then(
-						function (v) { console.log(v) }
-						//function (e) { console.error('error 1.75', e) }
-					)
-				},
-				function (e) { console.error('error 1', e) }
-			).then(
-				function (v) { console.log(v) },
-				function (e) {
-					return  Promise(5)
-					console.error('error 2', e)
-				}
-			).then(
-				function (v) { console.log(v) },
-				function (e) { console.error('error 3', e) }
-			)
-			*/
+		xit('callbacks are called with no context', function(){
+			expect(handler1.calls.mostRecent().object).toBe(undefined);
+		})
 
-		xit('is canceled if not resolved', function(done){
-			p1 = new Promise(function () { 
+		xit('calls callbacks immediatly if already finished', function(){
 
-			}, function () {
-				 console.warn('canceled') 
+		})
+
+		xit('calls callbacks later if not yet finished', function(){
+			
+		})
+
+		it('passes value to a next callback if not returned explicitly', function(){
+			promise1 = new Promise(function(resolve){
+				resolve(value1)
 			})
-			p1.then(function () { console.info('p1 done') }, function (e) { console.error('p1 error: ' + e.message) })
+			handler1.and.callFake(function(){})
+			promise2 = promise1.then(handler1)
+			promise2.then(handler2)
+
+			expect(handler2).toHaveBeenCalledWith(value1)
+		})
+
+		it('passes a new value to a next callback if returned', function(){
+			promise1 = new Promise(function(resolve){
+				resolve(value1)
+			})
+			handler1.and.callFake(function(){
+				return value2
+			})
+			promise2 = promise1.then(handler1)
+			promise2.then(handler2)
+
+			expect(handler2).toHaveBeenCalledWith(value2)
+		})
+
+		it('passes a new value to a next progress callback if returned', function(){})
+
+		it('passes a value of a new returned promise to a next callback', function(done){
+			promise1 = new Promise(function(resolve){
+				resolve(value1)
+			})
+			promise2 = new Promise(function(resolve){
+				setTimeout(function(){
+					resolve(value2)
+				}, 10)
+			})
+			handler1.and.callFake(function(){
+				return promise2
+			})
+			promise3 = promise1.then(handler1)
+			promise3.then(handler2)
+
+			expect(handler2).not.toHaveBeenCalled()
+			setTimeout(function(){
+				expect(handler2).toHaveBeenCalledWith(value2)
+				done()
+			}, 20)
+		})
+
+		xit('self-resolution causes rejection with a TypeError', function(){})
+
+
+		xit('cancelation of a chain', function(){
 			p2 =  new Promise().wait(1000)
 			p2.then(function () { console.info('p2 done') }, function (e) { console.error('p2 error: ' + e.message) })
 			p3 = p2.then(function () { return 0})
 			
-			p3.cancel()
+			//p3 = p2.and(p1)
 
+			p3.cancel()
 		})
 
-		xit('notification chain', function(done){
-			p1 = new Promise(function (resolve, reject) {
-				var intervalId = setInterval(function () {
-					//pro('p1 pending')
-				}, 100)
+		xit('returns a rejected promise if an error instance is returned', function(){})
 
-				setTimeout(function () {
-					done('p1 done')
-					//fail(new Error('p1 fail'))
-					clearInterval(intervalId)
-				}, 3000)
-			})
-			p2 = new Promise(function (done, fail, pro) {
-				var intervalId = setInterval(function () {
-					//pro('p2 pending')
-				}, 100)
+		xit('returns a success promise if a value is returned from catch', function(){})
 
-				setTimeout(function () {
-					done('p2 done')
-					//fail(new Error('p2 fail'))
-					clearInterval(intervalId)
-				}, 500)
-			})
-
-			p3 = p2.and(p1).then(function (v) { console.log(v); }, function (e) { console.error(e) }, function (i) { console.info(i); })
-			//p2.then(function (v) { console.log(v); }, function (e) { console.error(e) }, function (i) { console.info(i); })
-			//p4 = p3.then(function (v) { console.log(v); }, function (e) { console.error(e) }, function (i) { console.info(i) })
-			//p3.cancel()
-			setTimeout(function () {
-				
-				//p4.then(function (v) { console.log('p4 value: ' + v); }, function (e) { console.error('p4 error: ' + e.message) })
-				//p3.then(function (v) { console.log('p3 value: ' + v); }, function (e) { console.error('p3 error: ' + e.message) }, function (i) { console.info('p3 progress: ' + i); return 111})
-				//.then(function (v) { console.log('p33 value: ' + v); }, function (e) { console.error('p33 error: ' + e.message) }, function (i) { console.info('p33 progress: ' + i); })
-
-				p1.then(function (v) { console.log('p1 test: ' + v) }, function (e) { console.error('p1 error: ' + e.message) }, function (i) { console.info('p1 progress: ' + i); })
-
-
-				//console.log('sync')
-			}, 200)
-
-			setTimeout(function () {
-
-				//p3.then(function (v) { console.log('p3 value: ' + v); }, function (e) { console.error('p3 error: ' + e.message) })
-				//p4.then(function (v) { console.log('p4 value: ' + v); }, function (e) { console.error('p4 error: ' + e.message) })
-				//p1.then(function (v) { console.log('p1 test: ' + v) }, function (e) { console.error('p1 error: ' + e.message) })
-
-				//console.log('sync')
-			}, 300)
-			
-
-
-			//p1 = new Promise(function(done, error) { setTimeout(function() { done('p1 done') }, 500) })
-			//p2 = new Promise(function(done, error) { setTimeout(function() { done('p2 done') }, 1500) })
-			//p3 = p1.then(function(v) { console.log(v); return p2 })
-			//p3.then(function(v) { console.log('p3 value ' + v); })
-			//p1.then(function(v) { console.log('p1 value ' + v); })
+		xit('callback are called in a correct order', function(){
+			//p3.then(function (v) { console.log('p3 value: ' + v); }, function (e) { console.error('p3 error: ' + e.message) })
+			//p4.then(function (v) { console.log('p4 value: ' + v); }, function (e) { console.error('p4 error: ' + e.message) })
+			//p1.then(function (v) { console.log('p1 test: ' + v) }, function (e) { console.error('p1 error: ' + e.message) })
 
 		})
 	})
