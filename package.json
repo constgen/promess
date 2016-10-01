@@ -2,7 +2,7 @@
 	"name": "promess",
 	"private": false,
 	"description": "Promise library",
-	"version": "0.2.0",
+	"version": "0.2.1",
 	"license": "MIT",
 	"author": "Constantine Genchevsky",
 	"main": "src/index.js",
@@ -17,6 +17,7 @@
 		
 	},
 	"devDependencies": {
+		"jquery": ">=2.0.0",
 		"grunt": "1.0.1",
 		"grunt-contrib-jshint": "1.0.0",
 		"grunt-contrib-watch": "1.0.0",

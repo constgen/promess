@@ -2,6 +2,7 @@
 
 describe('Promise helper', function () {
 	var Promise = require('../../src/promise.js')
+
 	var promise
 
 	describe('"delay"', function () {
@@ -59,19 +60,14 @@ describe('Promise helper', function () {
 		})
 	})
 
-	describe('"delay"', function () {
+	describe('"timeout"', function () {
 		it('', function(done){
 			
 		})
 	})
 
-	describe('"delay"', function () {
-		it('', function(done){
-			
-		})
-	})
 
-	describe('"delay"', function () {
+	describe('"isPromise"', function () {
 		it('', function(done){
 			
 		})

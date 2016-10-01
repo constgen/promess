@@ -2,6 +2,7 @@
 
 var isFunc = require('./util.js').isFunc
 var isPromise = require('./util.js').isPromise
+var isError = require('./util.js').isError
 var Deferred = require('./deferred.js')
 
 module.exports = Promise
@@ -19,9 +20,10 @@ function setDeferToPromise (promise, deferred) {
 // Promise constructor has to be used with `new` operator, 
 // else returns istantly resolved promise object.
 function Promise (initFunc, cancelFunc, optionalValue) {
-	var deferred, //Deferred, that will serve this Promise
-		promise,
-		args = arguments;
+	var deferred //Deferred, that will serve this Promise
+	var promise
+	var args = arguments
+	var argsLength = args.length
 
 	//if was called as a constructor or by `Promise.call()`
 	if (
@@ -69,10 +71,17 @@ function Promise (initFunc, cancelFunc, optionalValue) {
 			//make promise resolved with passed value
 			promise = new Promise(function(d) {
 				//some speed optimization
-				if (args.length > 3) {
-					d.apply(undefined, args)
-				} else {
+				if (argsLength === 1) {
+					d.call(undefined, initFunc)
+				} 
+				else if (argsLength === 2){
+					d.call(undefined, initFunc, cancelFunc)
+				}
+				else if (argsLength === 3){
 					d.call(undefined, initFunc, cancelFunc, optionalValue)
+				}
+				else {
+					d.apply(undefined, args)
 				}
 			})
 		}

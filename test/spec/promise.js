@@ -2,19 +2,14 @@
 
 describe('Promise', function () {
 	var Promise = require('../../src/promise.js')
+	var $ = require('jquery')
 
 	var promise1, promise2, promise3, promise4
 	var handler1, handler2, handler3
 	var value1, value2, value3
 	var error1, error2, error3
 
-	var A = [1,2, null, undefined, new Error(), 3]
-
 	beforeEach(function () {
-		promise1 = undefined
-		promise2 = undefined
-		promise3 = undefined
-		promise4 = undefined
 		value1 = 1
 		value2 = 2
 		value3 = 3
@@ -26,6 +21,13 @@ describe('Promise', function () {
 		handler3 = jasmine.createSpy('handler3')
 	})
 
+	afterEach(function(){
+		promise1 = undefined
+		promise2 = undefined
+		promise3 = undefined
+		promise4 = undefined
+	})
+
 
 /*
 
@@ -33,16 +35,188 @@ describe('Promise', function () {
 
 
 
-can be called without new (inheritance)
-can be canceled
-can progress
-catches exeptions in a progress handler
+
+
+
 
 chain
 
 
  */
+	describe('constructor', function(){
+		it('can be initiated without a creation function', function(){
+			handler1.and.callFake(function(){
+				return new Promise()
+			})
+			promise1 = handler1()
+			
+			expect(handler1).not.toThrowError()
+			expect(promise1).toEqual(jasmine.any(Promise))
+		})
+		it('can be initiated with any value instead of function', function(){
+			handler1.and.callFake(function(){
+				return new Promise(value1)
+			})
+			promise1 = handler1()
+			promise1.then(handler2)
+			
+			expect(handler1).not.toThrowError()
+			expect(promise1).toEqual(jasmine.any(Promise))
+			expect(handler2).not.toHaveBeenCalled()
+		})
+		it('can be called without a `new` statement', function(){
+			handler1.and.callFake(function(){
+				return Promise()
+			})
+			promise1 = handler1()
 
+			expect(handler1).not.toThrowError()
+			expect(promise1).toEqual(jasmine.any(Promise))
+		})
+
+		describe('has a coercion', function(){
+			it('without value', function(){
+				promise1 = Promise()
+				promise1.then(handler1)
+				
+				expect(handler1).toHaveBeenCalledWith()
+			})
+
+			it('for a value', function(){
+				promise1 = Promise(value1)
+				promise1.then(handler1)
+				
+				expect(handler1).toHaveBeenCalledWith(value1)
+			})
+
+			it('for multiple values', function(){
+				promise1 = Promise(value1, value2)
+				promise2 = Promise(value1, value2, value3)
+				promise3 = Promise(value1, value2, value3, value2, value1)
+				promise1.then(handler1)
+				promise2.then(handler2)
+				promise3.then(handler3)
+				
+				expect(handler1).toHaveBeenCalledWith(value1, value2)
+				expect(handler2).toHaveBeenCalledWith(value1, value2, value3)
+				expect(handler3).toHaveBeenCalledWith(value1, value2, value3, value2, value1)
+			})
+
+			it('for an error', function(){
+				promise1 = Promise(error1)
+				promise1.catch(handler1)
+				
+				expect(handler1).toHaveBeenCalledWith(error1)
+			})
+
+			it('only for one error and ignores multiple errors', function(){
+				promise1 = Promise(error1, error2)
+				promise2 = Promise(error1, error2, error3)
+				promise3 = Promise(error1, error2, error3, error1, error2)
+				promise1.catch(handler1)
+				promise2.catch(handler2)
+				promise3.catch(handler3)
+				
+				expect(handler1).toHaveBeenCalledWith(error1)
+				expect(handler2).toHaveBeenCalledWith(error1)
+				expect(handler3).toHaveBeenCalledWith(error1)
+			})
+
+			it('calls a function in case of coercion and gets returned value', function(){
+				var value = function(){ return value1 }
+				promise1 = Promise(value)
+				promise1.then(handler1)
+				
+				expect(handler1).toHaveBeenCalledWith(value1)
+			})
+
+			it('for an own Promise object and should be equal to the same object', function(){
+				promise1 = new Promise()
+				promise2 = Promise(promise1)
+				
+				expect(promise2).toBe(promise1)
+			})
+
+			it('for a Promise-like object', function(){
+				var promiselike1 = {then: function(callback){
+					callback(value1)
+				}}
+				var promiselike2 = {then: function(callback, errorback){
+					errorback(value2)
+				}}
+				promise1 = Promise(promiselike1)
+				promise2 = Promise(promiselike2)
+				promise1.then(handler1)
+				promise1.catch(handler3)
+				promise2.then(handler3)
+				promise2.catch(handler2)
+				
+				expect(promise1).toEqual(jasmine.any(Promise))
+				expect(handler1).not.toBe(promiselike1)
+				expect(handler1).toHaveBeenCalledWith(value1)
+				expect(handler2).toHaveBeenCalledWith(value2)
+				expect(handler3).not.toHaveBeenCalled()
+			})
+		})
+
+		describe('has an inheritance', function () {
+			var PromiseLike;
+			beforeEach(function(){
+				PromiseLike = function(initFunc) {
+					Promise.call(this, initFunc)
+					this.extraProp = value1
+				}
+				PromiseLike.prototype = Object.create(Promise.prototype)
+				PromiseLike.prototype.constructor = PromiseLike
+
+				PromiseLike.prototype.then = function(callback, errorback, progressback) {
+					return new PromiseLike(function(d, e, p) {
+						Promise.prototype.then.call(this, d, e, p)
+					}.bind(this))
+				}
+
+				PromiseLike.prototype.extraMethod = function() {
+					return this.then(function() {
+						return new PromiseLike()
+					})
+				}
+			})
+
+			it('that correctly preseves instance composition', function(){
+				promise1 = new PromiseLike()
+
+				expect(promise1).toEqual(jasmine.any(PromiseLike))
+				expect(promise1).toEqual(jasmine.any(Promise))
+			})
+
+			xit('with custom properties', function(){
+				promise1 = new PromiseLike()
+
+				expect(promise1.extraProp)
+				expect(promise1.extraMethod)
+				expect(promise1.then)
+
+				p1 = new PromiseLike(function(r) { console.log(1); setTimeout(r, 500) })
+				p2 = p1.then(function(v) { console.info(v)})
+				console.log(p1.extra())
+				console.log(p2.extra)
+			})
+
+			xit('with cutom method', function(){
+				promise1 = new PromiseLike()
+				promise2 = promise1.extraMethod()
+
+				expect(promise2).toEqual(jasmine.any(PromiseLike))
+			})
+
+			it('then returns the inherited instance', function(){
+				promise1 = new PromiseLike()
+				promise2 = promise1.then()
+
+				expect(promise2).toEqual(jasmine.any(PromiseLike))
+			})
+		})
+	})
 
 	describe('on success', function (){
 		it('can be resolved', function(done){
@@ -452,17 +626,197 @@ chain
 		})
 	})
 
-	describe('constructor', function(){
-		xit('can be called without a creation function', {
+	describe('on progress', function(){
+		it('can be notified', function(done){
+			promise1 = new Promise(function(resolve, reject, notify){
+				var intervalId = setInterval(notify, 10)
+				setTimeout(function(){
+					clearInterval(intervalId)
+				}, 55)
+			})
+			promise1.then(null, null, handler1)
 
+			setTimeout(function(){
+				expect(handler1.calls.count()).toEqual(5)
+				done()
+			}, 60)
 		})
-		xit('can be called without a `new` statement', {
-			
+
+		it('is notified synchronosly', function(){
+			var progress;
+			promise1 = new Promise(function(resolve, reject, notify){
+				progress = notify
+			})
+			promise1.then(null, null, handler1)
+			progress()
+			progress()
+			progress()
+
+			expect(handler1.calls.count()).toEqual(3)
+		})
+
+		xit('is notified with a value', function(){
+			var progress;
+			promise1 = new Promise(function(resolve, reject, notify){
+				progress = notify
+			})
+			promise1.then(null, null, handler1)
+			progress()
+			progress()
+			progress()
+
+			expect(handler1.calls.count()).toEqual(3)
+		})
+
+		xit('is notified with multiple values', function(){
+			var progress;
+			promise1 = new Promise(function(resolve, reject, notify){
+				progress = notify
+			})
+			promise1.then(null, null, handler1)
+			progress()
+			progress()
+			progress()
+
+			expect(handler1.calls.count()).toEqual(3)
+		})
+
+		xit('handles `progress()`', function(){
+			var progress;
+			promise1 = new Promise(function(resolve, reject, notify){
+				progress = notify
+			})
+			promise1.then(null, null, handler1)
+			progress()
+			progress()
+			progress()
+
+			expect(handler1.calls.count()).toEqual(3)
+		})
+
+		it('don\'t notify if resolved', function(done){
+			promise1 = new Promise(function(resolve, reject, notify){
+				var intervalId = setInterval(notify, 10)
+				setTimeout(function(){
+					clearInterval(intervalId)
+				}, 25)
+				resolve()
+			})
+			promise1.then(null, null, handler1)
+			setTimeout(function(){
+				expect(handler1).not.toHaveBeenCalled()
+				done()
+			}, 30)
+		})
+
+		it('don\'t notify if rejected', function(done){
+			promise1 = new Promise(function(resolve, reject, notify){
+				var intervalId = setInterval(notify, 10)
+				setTimeout(function(){
+					clearInterval(intervalId)
+				}, 25)
+				reject()
+			})
+			promise1.then(null, null, handler1)
+			setTimeout(function(){
+				expect(handler1).not.toHaveBeenCalled()
+				done()
+			}, 30)
+		})
+
+		xit('catches exeptions in a notify handler', function(){
+
+
 		})
 	})
 
-	describe('on progress', function(){
-		xit('resolved', function(done){
+	describe('canceletion', function () {
+		it('can be performed', function(){
+			promise1 = new Promise()
+			promise1.catch(handler1)
+			promise1.cancel()
+
+			expect(handler1).toHaveBeenCalled()
+		})
+
+		it('calls canceler', function(){
+			promise1 = new Promise(function(){}, handler1)
+			promise1.cancel()
+
+			expect(handler1).toHaveBeenCalled()
+		})
+
+		xit('`cancel()` returns context', function(){
+			promise1 = new Promise(function(){}, handler1)
+			promise1.cancel()
+
+			expect(handler1).toHaveBeenCalled()
+		})	
+	})
+
+	describe('then', function(){
+		it('returns a new Promise instance', function(){
+			promise1 = new Promise()
+			promise2 = promise1.then(handler1)
+
+			expect(promise2).not.toEqual(promise1)
+			expect(promise2).toEqual(jasmine.any(Promise))
+		})
+	})
+
+	describe('then', function(){
+		it('returns a new Promise instance', function(){
+			promise1 = new Promise()
+			promise2 = promise1.then(handler1)
+
+			expect(promise2).not.toEqual(promise1)
+			expect(promise2).toEqual(jasmine.any(Promise))
+		})
+	})
+
+	describe('chaining', function(){
+		/*
+			window.p = new Promise(function (resolve, reject) { setTimeout(resolve) })
+			.then(
+				function () {
+					return new Error('error-test')
+					return new Promise(function (resolve) { setTimeout(resolve) }).then(
+						function () { throw new Error('345') },
+						function (e) { console.error('error 1.5', e) }
+					).then(
+						function (v) { console.log(v) }
+						//function (e) { console.error('error 1.75', e) }
+					)
+				},
+				function (e) { console.error('error 1', e) }
+			).then(
+				function (v) { console.log(v) },
+				function (e) {
+					return  Promise(5)
+					console.error('error 2', e)
+				}
+			).then(
+				function (v) { console.log(v) },
+				function (e) { console.error('error 3', e) }
+			)
+			*/
+
+		xit('is canceled if not resolved', function(done){
+			p1 = new Promise(function () { 
+
+			}, function () {
+				 console.warn('canceled') 
+			})
+			p1.then(function () { console.info('p1 done') }, function (e) { console.error('p1 error: ' + e.message) })
+			p2 =  new Promise().wait(1000)
+			p2.then(function () { console.info('p2 done') }, function (e) { console.error('p2 error: ' + e.message) })
+			p3 = p2.then(function () { return 0})
+			
+			p3.cancel()
+
+		})
+
+		xit('notification chain', function(done){
 			p1 = new Promise(function (resolve, reject) {
 				var intervalId = setInterval(function () {
 					//pro('p1 pending')
@@ -522,169 +876,108 @@ chain
 		})
 	})
 
-
-	describe('canceletion', function () {
-		it('can be performed', function(){
-			promise1 = new Promise()
-			promise1.catch(handler1)
-			promise1.cancel()
-
-			expect(handler1).toHaveBeenCalled()
-		})
-
-		it('calls canceler', function(){
-			promise1 = new Promise(function(){}, handler1)
-			promise1.cancel()
-
-			expect(handler1).toHaveBeenCalled()
-		})
-
-
-
-		
-	})
-
-	describe('then', function(){
-		it('returns a new Promise instance', function(){
-			promise1 = new Promise()
-			promise2 = promise1.then(handler1)
-
-			expect(promise2).not.toEqual(promise1)
-			expect(promise2).toEqual(jasmine.any(Promise))
-		})
-	})
-
-	describe('chain', function(){
-		xit('is canceled if not resolved', function(done){
-			p1 = new Promise(function () { 
-
-			}, function () {
-				 console.warn('canceled') 
+	describe('compatible with', function () {
+		describe('jQuery', function(){
+			var $deferred
+			var $promise
+			var TIMEOUT = 10
+			beforeEach(function(){
+				$deferred = $.Deferred()
+				$promise = $deferred.promise()
 			})
-			p1.then(function () { console.info('p1 done') }, function (e) { console.error('p1 error: ' + e.message) })
-			p2 =  new Promise().wait(1000)
-			p2.then(function () { console.info('p2 done') }, function (e) { console.error('p2 error: ' + e.message) })
-			p3 = p2.then(function () { return 0})
-			
-			p3.cancel()
 
-		})
-	})
-return;
+			it('deferred', function(done){
+				promise1 = Promise($deferred).then(handler1)
 
+				expect(handler1).not.toHaveBeenCalled()
 
+				$deferred.resolve()			
 
-	describe('Resolve promise with a promise', function () {
-		it('', function(done){
-			p2 = new Promise(5).wait(1500)
-			p2.then(function (v) { console.info('p2 done', v) }, function (e) { console.error('p2 error: ' + e.message) })
+				setTimeout(function(){
+					expect(promise1).toEqual(jasmine.any(Promise))
+					expect(handler1).toHaveBeenCalled()
+					done()
+				}, TIMEOUT)
+			})
 
-			p1 = new Promise(function (resolve, reject) {
-				setTimeout( function(){ resolve(p2) },  750)
-			}, function () { console.warn('canceled') })
+			it('promise', function(done){
+				promise1 = Promise($promise).then(handler1)
 
-			p1.then(function (v) { console.info('p1 done', v) }, function (e) { console.error('p1 error: ' + e.message) })
+				expect(handler1).not.toHaveBeenCalled()
 
-			//p3 = p2.then(function () { return 0 })
+				$deferred.resolve()		
 
-		})
-	})
+				setTimeout(function(){
+					expect(promise1).toEqual(jasmine.any(Promise))
+					expect(handler1).toHaveBeenCalled()
+					done()
+				}, TIMEOUT)
+			})
 
-	
-
-	
-
-	describe('Inheritance', function () {
-		it('', function(done){
-			window.ExtPromise = function(initFunc, cancelFunc) {
-				if (this instanceof Promise) { //with `new` operator
-					Promise.call(this, initFunc, cancelFunc)
-				}
-				else { //as a function
-					return new ExtPromise(function(resolve) {
-						resolve(initFunc)
-					})
-				}
-			}
-			ExtPromise.prototype = Object.create(Promise.prototype)
-			ExtPromise.prototype.constructor = ExtPromise
-
-			ExtPromise.prototype.then = function(src, options) {
-				return new ExtPromise(function(d, e, p) {
-					Promise.prototype.then.call(this, d, e, p)
-				}.bind(this))
-			}
-
-			ExtPromise.prototype.extra = function(src, options) {
-				return this.then(function() {
-					return new ExtPromise()
+			it('deffered in a chain', function(done){
+				promise1 = Promise().then(function(){
+					return $deferred
 				})
-				
-			}
-			ExtPromise.prototype.load = function(src, options) {
-				return this.then(function() {
-					return Core.load(src, options)
+				promise1.then(handler1)
+
+				expect(handler1).not.toHaveBeenCalled()
+
+				$deferred.resolve()		
+
+				setTimeout(function(){
+					expect(handler1).toHaveBeenCalled()
+					done()
+				}, TIMEOUT)
+			})
+
+			it('promise in a chain', function(done){
+				promise1 = Promise().then(function(){
+					return $promise
 				})
-			}
+				promise1.then(handler1)
 
-			p1 = new ExtPromise(function(r) { console.log(1); setTimeout(r, 500) })
-			p2 = p1.then(function(v) { console.info(v)})
-			console.log(p1.extra())
-			console.log(p2.extra)
+				expect(handler1).not.toHaveBeenCalled()
 
-		})
-	})
+				$deferred.resolve()		
 
-	describe('jQuery compatibility', function () {
-		it('', function(done){
-			var def = $.Deferred()
-			setTimeout(function () { def.resolve(1,2,3)}, 10)
-			def//.then(function (a, b, c) { console.log(a, b, c) })
-			
-			window.p2 = Promise(def).then(function (a,b,c) {console.info(a,b,c) })
+				setTimeout(function(){
+					expect(handler1).toHaveBeenCalled()
+					done()
+				}, TIMEOUT)
+			})
 
-		})
-	})
+			it('success with multiple values', function(done){
+				promise1 = Promise($promise)
+				promise1.then(handler1)
+				$deferred.resolve(value1, value2, value3)			
 
-	describe('default', function () {
-		it('', function(done){
-			//Promise.some(A).then(function(R) {
-			//	console.log(R)
-			//	console.log(R.filter(function() { return true}))
-			//})
-			/*
-			window.p = new Promise(function (resolve, reject) { setTimeout(resolve) })
-			.then(
-				function () {
-					return new Error('error-test')
-					return new Promise(function (resolve) { setTimeout(resolve) }).then(
-						function () { throw new Error('345') },
-						function (e) { console.error('error 1.5', e) }
-					).then(
-						function (v) { console.log(v) }
-						//function (e) { console.error('error 1.75', e) }
-					)
-				},
-				function (e) { console.error('error 1', e) }
-			).then(
-				function (v) { console.log(v) },
-				function (e) {
-					return  Promise(5)
-					console.error('error 2', e)
-				}
-			).then(
-				function (v) { console.log(v) },
-				function (e) { console.error('error 3', e) }
-			)
-			*/
+				setTimeout(function(){
+					expect(handler1).toHaveBeenCalledWith(value1, value2, value3)
+					done()
+				}, TIMEOUT)
+			})
 
-		})
-	})
+			it('fail', function(done){
+				promise1 = Promise($promise)
+				promise1.catch(handler1)
+				$deferred.reject(error1)			
 
-	describe('"delay"', function () {
-		it('', function(done){
-			
+				setTimeout(function(){
+					expect(handler1).toHaveBeenCalledWith(error1)
+					done()
+				}, TIMEOUT)
+			})
 
+			it('progress', function(done){
+				promise1 = Promise($promise)
+				promise1.then(null, null, handler1)
+				$deferred.notify(value1)			
+
+				setTimeout(function(){
+					expect(handler1).toHaveBeenCalledWith(value1)
+					done()
+				}, TIMEOUT)
+			})
 		})
 	})
 })
